@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VTT Token Generator</title>
+    <!-- Cropper.js CSS via CDN -->
+    <link href="https://unpkg.com/cropperjs/dist/cropper.min.css" rel="stylesheet"/>
+    <style>
+        /* Base Styles */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #aaa;
+            display: flex;
+            height: 100vh;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+        }
+
+        .container {
+            background-color: #ccc;
+            padding: 20px 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 700px;
+            width: 100%;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        /* File Inputs */
+        .file-input {
+            margin-bottom: 20px;
+        }
+
+        /* Preview Container */
+        .preview-container {
+            display: none;
+            position: relative;
+            width: 300px;
+            height: 300px;
+            margin: 0 auto 20px auto;
+            border-radius: 50%;
+            overflow: hidden;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .img-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        /* Canvas Styles */
+        canvas {
+            display: none;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+            margin-bottom: 20px;
+        }
+
+        /* Buttons */
+        .button-group {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+        }
+
+        button#generateBtn {
+            background-color: #2196F3;
+        }
+
+        button#generateBtn:hover {
+            background-color: #0b7dda;
+        }
+
+        button#resetBtn {
+            background-color: #f44336;
+        }
+
+        button#resetBtn:hover {
+            background-color: #da190b;
+        }
+
+        button#downloadPngBtn {
+            background-color: #4CAF50;
+            display: none;
+        }
+
+        button#downloadPngBtn:hover {
+            background-color: #45a049;
+        }
+
+        button#downloadWebPBtn {
+            background-color: #ff9800;
+            display: none;
+        }
+
+        button#downloadWebPBtn:hover {
+            background-color: #e68900;
+        }
+
+        /* Frame Upload and Color Picker */
+        .frame-upload-container {
+            display: none;
+            margin-bottom: 20px;
+        }
+
+        .color-picker-container {
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .color-picker-container label {
+            font-weight: bold;
+        }
+
+        .color-picker-container input[type="color"],
+        .color-picker-container input[type="range"] {
+            cursor: pointer;
+        }
+
+        /* Hint Text */
+        .hint {
+            font-size: 12px;
+            color: #555;
+            margin-top: 10px;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 700px) {
+            .container {
+                padding: 15px 20px;
+            }
+
+            .button-group {
+                flex-direction: column;
+                width: 100%;
+            }
+
+            button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>VTT Token Generator</h1>
+        
+        <!-- Main Image Upload -->
+        <input type="file" id="imageUpload" accept="image/*" class="file-input" aria-label="Upload Main Image">
+
+        <!-- Preview Container -->
+        <div class="preview-container" aria-label="Image Preview">
+            <div class="img-container">
+                <img id="imagePreview" src="" alt="Image Preview">
+            </div>
+        </div>
+
+        <!-- Frame Upload Container -->
+        <div class="frame-upload-container" aria-label="Custom Frame Upload">
+            <h2>Upload Custom Frame (Optional)</h2>
+            <input type="file" id="frameUpload" accept="image/*" class="file-input" aria-label="Upload Frame Image">
+            <div class="color-picker-container">
+                <label for="frameColor">Frame Color:</label>
+                <input type="color" id="frameColor" value="#ffffff" aria-label="Choose Frame Color">
+                <label for="frameOpacity">Saturation:</label>
+                <input type="range" id="frameOpacity" min="0" max="1" step="0.01" value="1" aria-label="Frame Opacity">
+            </div>
+            <p class="hint">Ensure the frame image has a transparent background.</p>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="button-group">
+            <button id="generateBtn" type="button">Generate Token</button>
+            <button id="resetBtn" type="button">Reset</button>
+        </div>
+
+        <!-- Final Canvas for Token -->
+        <canvas id="canvas" width="410" height="410" aria-label="Final Token Canvas"></canvas>
+        <br>
+        <button id="downloadPngBtn" type="button">Download as PNG</button>
+        <button id="downloadWebPBtn" type="button">Download as WebP</button>
+    </div>
+
+    <!-- Cropper.js JS via CDN -->
+    <script src="https://unpkg.com/cropperjs/dist/cropper.min.js"></script>
+    <script>
+        // JavaScript Code for VTT Token Generator
+
+        // Initialize variables
+        let cropper = null;
+        let frameImage = null;
+        let originalFileName = ''; // To store the original file name
+
+        // Default Frame Image (SVG Ring)
+        const defaultFrameImage = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MTAiIGhlaWdodD0iNDEwIj48Y2lyY2xlIGN4PSIyMDUiIGN5PSIyMDUiIHI9IjIwMCIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIxMCIgZmlsbD0ibm9uZSIvPjwvc3ZnPg==';
+
+        // Utility Function: Convert Hex to RGBA
+        const hexToRGBA = (hex, alpha) => {
+            const bigint = parseInt(hex.slice(1), 16);
+            const r = (bigint >> 16) & 255;
+            const g = (bigint >> 8) & 255;
+            const b = bigint & 255;
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        };
+
+        // Utility Function: Modify File Name by Appending " Token" Before Extension
+        const getTokenFileName = (originalName, format) => {
+            if (!originalName) {
+                // Default file name if original name is not available
+                return `token.${format}`;
+            }
+
+            const lastDotIndex = originalName.lastIndexOf('.');
+            if (lastDotIndex === -1) {
+                // No extension found
+                return `${originalName} Token.${format}`;
+            }
+
+            const name = originalName.substring(0, lastDotIndex);
+            const extension = originalName.substring(lastDotIndex + 1);
+            return `${name} Token.${format}`;
+        };
+
+        // Handle Main Image Upload
+        const imageUpload = document.getElementById('imageUpload');
+        imageUpload.addEventListener('change', handleImageUpload);
+
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (!file.type.startsWith('image/')) {
+                alert('Please upload a valid image file.');
+                return;
+            }
+
+            originalFileName = file.name; // Store the original file name
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                const imagePreview = document.getElementById('imagePreview');
+                imagePreview.src = reader.result;
+
+                // Display preview and frame upload options
+                document.querySelector('.preview-container').style.display = 'block';
+                document.querySelector('.frame-upload-container').style.display = 'block';
+
+                // Initialize Cropper.js once the image is loaded
+                imagePreview.onload = () => initializeCropper(imagePreview);
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // Initialize Cropper.js with Circular Crop Box
+        function initializeCropper(image) {
+            if (cropper) {
+                cropper.destroy();
+            }
+
+            cropper = new Cropper(image, {
+                aspectRatio: 1,
+                viewMode: 1,
+                movable: true,
+                zoomable: true,
+                rotatable: false,
+                scalable: false,
+                responsive: true,
+                autoCropArea: 1,
+                guides: false,
+                center: true,
+                background: false,
+                highlight: false,
+                dragCrop: false,
+                cropBoxMovable: true,
+                cropBoxResizable: true,
+                toggleDragModeOnDblclick: false,
+                ready: function () {
+                    adjustCropBox();
+                }
+            });
+        }
+
+        // Adjust Crop Box to be Circular
+        function adjustCropBox() {
+            const cropBoxData = cropper.getCropBoxData();
+            const containerData = cropper.getContainerData();
+            const minDim = Math.min(cropBoxData.width, cropBoxData.height);
+
+            cropper.setCropBoxData({
+                width: minDim,
+                height: minDim,
+                left: (containerData.width - minDim) / 2,
+                top: (containerData.height - minDim) / 2
+            });
+
+            const cropBox = document.querySelector('.cropper-crop-box');
+            if (cropBox) {
+                cropBox.style.borderRadius = '50%';
+                cropBox.style.border = '2px dashed #fff';
+            }
+        }
+
+        // Handle Frame Upload
+        const frameUpload = document.getElementById('frameUpload');
+        frameUpload.addEventListener('change', handleFrameUpload);
+
+        function handleFrameUpload(event) {
+            const file = event.target.files[0];
+            if (!file) {
+                frameImage = null;
+                return;
+            }
+
+            if (!file.type.startsWith('image/')) {
+                alert('Please upload a valid image file for the frame.');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                const img = new Image();
+                img.onload = () => {
+                    // Scale the frame image to fit the canvas
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = 410;
+                    tempCanvas.height = 410;
+                    const ctx = tempCanvas.getContext('2d');
+                    ctx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+                    ctx.drawImage(img, 0, 0, tempCanvas.width, tempCanvas.height);
+                    frameImage = tempCanvas.toDataURL('image/png');
+                };
+                img.src = reader.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // Generate Token Button
+        const generateBtn = document.getElementById('generateBtn');
+        generateBtn.addEventListener('click', generateToken);
+
+        function generateToken() {
+            if (!cropper) {
+                alert('Please upload and adjust an image first.');
+                return;
+            }
+
+            // Get the cropped image
+            const croppedCanvas = cropper.getCroppedCanvas({
+                width: 410,
+                height: 410,
+                imageSmoothingQuality: 'high',
+                fillColor: 'transparent'
+            });
+
+            // Get frame customization options
+            const frameColor = document.getElementById('frameColor').value;
+            const frameOpacity = parseFloat(document.getElementById('frameOpacity').value);
+
+            // Choose frame source
+            const frameSrc = frameImage || defaultFrameImage;
+
+            // Load frame image
+            const frameImg = new Image();
+            frameImg.onload = () => applyFrame(croppedCanvas, frameImg, frameColor, frameOpacity);
+            frameImg.src = frameSrc;
+        }
+
+        // Apply Frame to Cropped Image
+        function applyFrame(croppedCanvas, frameImg, frameColor, frameOpacity) {
+            // Always tint the frame, regardless of whether it's custom or default
+            tintFrameImage(frameImg, frameColor, frameOpacity, (tintedFrame) => {
+                renderFinalCanvas(croppedCanvas, tintedFrame);
+            });
+        }
+
+        // Tint Frame Image
+        function tintFrameImage(frameImg, color, opacity, callback) {
+            const tintCanvas = document.createElement('canvas');
+            tintCanvas.width = 410;
+            tintCanvas.height = 410;
+            const ctx = tintCanvas.getContext('2d');
+
+            // Draw the frame
+            ctx.drawImage(frameImg, 0, 0, tintCanvas.width, tintCanvas.height);
+
+            if (opacity > 0) {
+                // Apply color tint
+                ctx.fillStyle = hexToRGBA(color, opacity);
+                ctx.globalCompositeOperation = 'source-in';
+                ctx.fillRect(0, 0, tintCanvas.width, tintCanvas.height);
+                ctx.globalCompositeOperation = 'source-over'; // Reset composite operation
+            }
+
+            const tintedFrame = new Image();
+            tintedFrame.onload = () => callback(tintedFrame);
+            tintedFrame.src = tintCanvas.toDataURL('image/png');
+        }
+
+        // Render Final Canvas with Cropped Image and Frame
+        function renderFinalCanvas(croppedCanvas, frameImg) {
+            const finalCanvas = document.getElementById('canvas');
+            const ctx = finalCanvas.getContext('2d');
+            const size = finalCanvas.width;
+
+            // Clear previous drawings
+            ctx.clearRect(0, 0, size, size);
+
+            // Draw circular clipping path
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(size / 2, size / 2, (size / 2) - 10, 0, Math.PI * 2, false);
+            ctx.closePath();
+            ctx.clip();
+
+            // Draw the cropped image
+            ctx.drawImage(croppedCanvas, 0, 0, size, size);
+            ctx.restore();
+
+            // Draw the frame on top
+            ctx.drawImage(frameImg, 0, 0, size, size);
+
+            // Display the final canvas and download buttons
+            finalCanvas.style.display = 'block';
+            document.getElementById('downloadPngBtn').style.display = 'inline-block';
+            document.getElementById('downloadWebPBtn').style.display = 'inline-block';
+        }
+
+        // Download as PNG Button
+        const downloadPngBtn = document.getElementById('downloadPngBtn');
+        downloadPngBtn.addEventListener('click', downloadAsPNG);
+
+        function downloadAsPNG() {
+            const canvas = document.getElementById('canvas');
+            const link = document.createElement('a');
+            const tokenFileName = getTokenFileName(originalFileName, 'png');
+            link.download = tokenFileName;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        // Download as WebP Button
+        const downloadWebPBtn = document.getElementById('downloadWebPBtn');
+        downloadWebPBtn.addEventListener('click', downloadAsWebP);
+
+        function downloadAsWebP() {
+            const canvas = document.getElementById('canvas');
+            const link = document.createElement('a');
+            const tokenFileName = getTokenFileName(originalFileName, 'webp');
+            link.download = tokenFileName;
+            link.href = canvas.toDataURL('image/webp');
+            link.click();
+        }
+
+        // Reset Button
+        const resetBtn = document.getElementById('resetBtn');
+        resetBtn.addEventListener('click', resetGenerator);
+
+        function resetGenerator() {
+            if (cropper) {
+                cropper.destroy();
+                cropper = null;
+            }
+
+            // Hide preview and frame upload
+            document.querySelector('.preview-container').style.display = 'none';
+            document.querySelector('.frame-upload-container').style.display = 'none';
+
+            // Hide final canvas and download buttons
+            document.getElementById('canvas').style.display = 'none';
+            downloadPngBtn.style.display = 'none';
+            downloadWebPBtn.style.display = 'none';
+
+            // Clear file inputs
+            imageUpload.value = '';
+            frameUpload.value = '';
+
+            // Reset frame image and customization options
+            frameImage = null;
+            originalFileName = ''; // Reset the original file name
+            document.getElementById('frameColor').value = '#ffffff';
+            document.getElementById('frameOpacity').value = '1';
+        }
+    </script>
+</body>
+</html>
